@@ -216,6 +216,43 @@ describe("PE header admission and bounded traversal", () => {
     });
   });
 
+  it.each([false, true])(
+    "rejects an empty header payload also owned by a section (PE32+ = %s)",
+    async (plus) => {
+      const fixture = peResourceFixture(plus);
+      const rawOffset = fixture.bytes.length;
+      const bytes = Buffer.concat([fixture.bytes, Buffer.alloc(4)]);
+      bytes.writeUInt16LE(2, 0x86);
+      const section = fixture.sectionAt + 40;
+      bytes.writeUInt32LE(4, section + 8);
+      bytes.writeUInt32LE(0x300, section + 12);
+      bytes.writeUInt32LE(4, section + 16);
+      bytes.writeUInt32LE(rawOffset, section + 20);
+      bytes.writeUInt32LE(0x300, fixture.dataOffsets[0]);
+      bytes.writeUInt32LE(0, (fixture.dataOffsets[0] ?? 0) + 4);
+
+      await expect(parse(bytes)).rejects.toMatchObject({
+        reason: "format",
+        message: "Ambiguous resource header RVA mapping.",
+      });
+    },
+  );
+
+  it.each([false, true])(
+    "retains an unambiguous empty header payload (PE32+ = %s)",
+    async (plus) => {
+      const fixture = peResourceFixture(plus);
+      fixture.bytes.writeUInt32LE(0x300, fixture.dataOffsets[0]);
+      fixture.bytes.writeUInt32LE(0, (fixture.dataOffsets[0] ?? 0) + 4);
+      const result = peResourcesSchema.parse(await parse(fixture.bytes));
+      expect(result.resources[0]?.payload.location).toEqual({
+        offset: 0x300,
+        bytes: 0,
+      });
+      expect(result.coverage.status).toBe("complete");
+    },
+  );
+
   it("keeps icon size mismatch and unresolved language distinct", async () => {
     const fixture = peResourceFixture();
     const data = fixture.dataOffsets.at(-1) ?? 0;

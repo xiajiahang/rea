@@ -110,7 +110,9 @@ export const readPeResourceLayout = (bytes: Buffer) => {
           )
         : containing;
     if (rva < headerSize) {
+      // Point ownership also matters for empty payloads at a section start.
       if (
+        containing.length > 0 ||
         sections.some(
           (section) =>
             section.rva < rva + size &&
